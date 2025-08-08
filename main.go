@@ -10,7 +10,14 @@ func main() {
 	fmt.Println("Starting chirpy server...")
 
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir(".")))
+
+	mux.Handle("/app/", http.StripPrefix("/app", http.FileServer(http.Dir("."))))
+
+	mux.HandleFunc("/healthz", func(wrt http.ResponseWriter, _ *http.Request) {
+		wrt.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		wrt.WriteHeader(200)
+		wrt.Write([]byte("OK"))
+	})
 
 	server := &http.Server{
 		Addr:    ":8080",
