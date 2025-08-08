@@ -9,9 +9,12 @@ import (
 func main() {
 	fmt.Println("Starting chirpy server...")
 
-	server := http.Server{
+	mux := http.NewServeMux()
+	mux.Handle("/", http.FileServer(http.Dir(".")))
+
+	server := &http.Server{
 		Addr:    ":8080",
-		Handler: http.NewServeMux(),
+		Handler: mux,
 	}
 
 	err := server.ListenAndServe()
