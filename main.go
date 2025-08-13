@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
+	"strings"
 	"sync/atomic"
 )
 
@@ -20,20 +22,35 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	return http.HandlerFunc(f)
 }
 
-func getValidateChirpResponse(chirpLength int) (int, any) {
-	if chirpLength > 140 {
+func getValidateChirpResponse(chirp string) (int, any) {
+	if len(chirp) > 140 {
 		return 400, struct {
 			Error string `json:"error"`
 		}{
 			Error: "Chirp is too long",
 		}
 	} else {
+		cleanChirp := removeProfanities(chirp)
 		return 200, struct {
-			Valid bool `json:"valid"`
+			CleanedBody string `json:"cleaned_body"`
 		}{
-			Valid: true,
+			CleanedBody: cleanChirp,
 		}
 	}
+}
+
+func removeProfanities(chirp string) string {
+	profanities := []string{
+		"kerfuffle", "sharbert", "fornax",
+	}
+
+	words := strings.Split(chirp, " ")
+	for i, word := range strings.Split(chirp, " ") {
+		if slices.Contains(profanities, strings.ToLower(word)) {
+			words[i] = "****"
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 func main() {
@@ -79,7 +96,7 @@ func main() {
 		}
 
 		// Write response
-		code, jsonMessage := getValidateChirpResponse(len(params.Body))
+		code, jsonMessage := getValidateChirpResponse(params.Body)
 		dat, err := json.Marshal(jsonMessage)
 		if err != nil {
 			fmt.Printf("Error marshalling JSON: %s\n", err)
