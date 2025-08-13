@@ -8,19 +8,11 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"sync/atomic"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/nfongster/chirpy/internal/database"
 )
-
-type apiConfig struct {
-	fileserverHits atomic.Int32
-	db             *database.Queries
-}
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	f := func(wrt http.ResponseWriter, req *http.Request) {
@@ -117,12 +109,8 @@ func main() {
 
 	mux.HandleFunc("POST /api/validate_chirp", func(wrt http.ResponseWriter, req *http.Request) {
 		// Handle request
-		type parameters struct {
-			Body string `json:"body"`
-		}
-
 		decoder := json.NewDecoder(req.Body)
-		params := parameters{}
+		params := validateChirpParameters{}
 		if err := decoder.Decode(&params); err != nil {
 			fmt.Printf("Error decoding parameters: %s\n", err)
 			wrt.WriteHeader(500)
@@ -145,12 +133,8 @@ func main() {
 
 	mux.HandleFunc("POST /api/users", func(wrt http.ResponseWriter, req *http.Request) {
 		// Handle request
-		type parameters struct {
-			Email string `json:"email"`
-		}
-
 		decoder := json.NewDecoder(req.Body)
-		params := parameters{}
+		params := createUserParameters{}
 		if err := decoder.Decode(&params); err != nil {
 			fmt.Printf("Error decoding parameters: %s\n", err)
 			wrt.WriteHeader(500)
@@ -166,12 +150,6 @@ func main() {
 		}
 
 		// Convert DB query struct to JSON struct
-		type User struct {
-			ID        uuid.UUID `json:"id"`
-			CreatedAt time.Time `json:"created_at"`
-			UpdatedAt time.Time `json:"updated_at"`
-			Email     string    `json:"email"`
-		}
 		dat, err := json.Marshal(User{
 			ID:        user.ID,
 			CreatedAt: user.CreatedAt,
