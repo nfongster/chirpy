@@ -33,14 +33,15 @@ func main() {
 		wrt.Write([]byte("OK\n"))
 	})
 
-	mux.HandleFunc("GET /api/metrics", func(wrt http.ResponseWriter, _ *http.Request) {
-		wrt.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	mux.HandleFunc("GET /admin/metrics", func(wrt http.ResponseWriter, _ *http.Request) {
+		wrt.Header().Set("Content-Type", "text/html; charset=utf-8")
 		wrt.WriteHeader(200)
 		hits := apiCfg.fileserverHits.Load()
-		fmt.Fprintf(wrt, "Hits: %d\n", hits)
+		html := fmt.Sprintf("<html><body><h1>Welcome, Chirpy Admin</h1><p>Chirpy has been visited %d times!</p></body></html>", hits)
+		wrt.Write([]byte(html))
 	})
 
-	mux.HandleFunc("POST /api/reset", func(wrt http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("POST /admin/reset", func(wrt http.ResponseWriter, _ *http.Request) {
 		wrt.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		wrt.WriteHeader(200)
 		apiCfg.fileserverHits.Swap(0)
