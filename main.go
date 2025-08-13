@@ -9,7 +9,9 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/nfongster/chirpy/internal/database"
@@ -17,7 +19,7 @@ import (
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
-	queries        *database.Queries
+	db             *database.Queries
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -67,6 +69,8 @@ func main() {
 		os.Exit(1)
 	}
 	dbURL := os.Getenv("DB_URL")
+	platform := os.Getenv("PLATFORM")
+
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		fmt.Printf("error opening db: %v\n", err)
@@ -76,7 +80,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	apiCfg := &apiConfig{
-		queries: dbQueries,
+		db: dbQueries,
 	}
 
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
@@ -95,10 +99,20 @@ func main() {
 		wrt.Write([]byte(html))
 	})
 
-	mux.HandleFunc("POST /admin/reset", func(wrt http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("POST /admin/reset", func(wrt http.ResponseWriter, req *http.Request) {
 		wrt.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		wrt.WriteHeader(200)
+		if platform != "dev" {
+			wrt.WriteHeader(403)
+			return
+		}
+
 		apiCfg.fileserverHits.Swap(0)
+		if err := apiCfg.db.DeleteAllUsers(req.Context()); err != nil {
+			fmt.Printf("Error deleting all users from db: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+		wrt.WriteHeader(200)
 	})
 
 	mux.HandleFunc("POST /api/validate_chirp", func(wrt http.ResponseWriter, req *http.Request) {
@@ -126,6 +140,52 @@ func main() {
 
 		wrt.Header().Set("Content-Type", "application/json")
 		wrt.WriteHeader(code)
+		wrt.Write(dat)
+	})
+
+	mux.HandleFunc("POST /api/users", func(wrt http.ResponseWriter, req *http.Request) {
+		// Handle request
+		type parameters struct {
+			Email string `json:"email"`
+		}
+
+		decoder := json.NewDecoder(req.Body)
+		params := parameters{}
+		if err := decoder.Decode(&params); err != nil {
+			fmt.Printf("Error decoding parameters: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+
+		// Write response
+		user, err := apiCfg.db.CreateUser(req.Context(), params.Email)
+		if err != nil {
+			fmt.Printf("Error querying user for email %s: %s\n", params.Email, err)
+			wrt.WriteHeader(500)
+			return
+		}
+
+		// Convert DB query struct to JSON struct
+		type User struct {
+			ID        uuid.UUID `json:"id"`
+			CreatedAt time.Time `json:"created_at"`
+			UpdatedAt time.Time `json:"updated_at"`
+			Email     string    `json:"email"`
+		}
+		dat, err := json.Marshal(User{
+			ID:        user.ID,
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+			Email:     user.Email,
+		})
+		if err != nil {
+			fmt.Printf("Error marshalling JSON: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+
+		wrt.Header().Set("Content-Type", "application/json")
+		wrt.WriteHeader(201)
 		wrt.Write(dat)
 	})
 
