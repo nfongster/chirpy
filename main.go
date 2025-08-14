@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/nfongster/chirpy/internal/database"
@@ -22,21 +23,8 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	return http.HandlerFunc(f)
 }
 
-func getValidateChirpResponse(chirp string) (int, any) {
-	if len(chirp) > 140 {
-		return 400, struct {
-			Error string `json:"error"`
-		}{
-			Error: "Chirp is too long",
-		}
-	} else {
-		cleanChirp := removeProfanities(chirp)
-		return 200, struct {
-			CleanedBody string `json:"cleaned_body"`
-		}{
-			CleanedBody: cleanChirp,
-		}
-	}
+func validateChirp(chirp string) bool {
+	return len(chirp) <= 140
 }
 
 func removeProfanities(chirp string) string {
@@ -107,30 +95,6 @@ func main() {
 		wrt.WriteHeader(200)
 	})
 
-	mux.HandleFunc("POST /api/validate_chirp", func(wrt http.ResponseWriter, req *http.Request) {
-		// Handle request
-		decoder := json.NewDecoder(req.Body)
-		params := validateChirpParameters{}
-		if err := decoder.Decode(&params); err != nil {
-			fmt.Printf("Error decoding parameters: %s\n", err)
-			wrt.WriteHeader(500)
-			return
-		}
-
-		// Write response
-		code, jsonMessage := getValidateChirpResponse(params.Body)
-		dat, err := json.Marshal(jsonMessage)
-		if err != nil {
-			fmt.Printf("Error marshalling JSON: %s\n", err)
-			wrt.WriteHeader(500)
-			return
-		}
-
-		wrt.Header().Set("Content-Type", "application/json")
-		wrt.WriteHeader(code)
-		wrt.Write(dat)
-	})
-
 	mux.HandleFunc("POST /api/users", func(wrt http.ResponseWriter, req *http.Request) {
 		// Handle request
 		decoder := json.NewDecoder(req.Body)
@@ -163,6 +127,68 @@ func main() {
 		}
 
 		wrt.Header().Set("Content-Type", "application/json")
+		wrt.WriteHeader(201)
+		wrt.Write(dat)
+	})
+
+	mux.HandleFunc("POST /api/chirps", func(wrt http.ResponseWriter, req *http.Request) {
+		decoder := json.NewDecoder(req.Body)
+		params := createChirpParameters{}
+		if err := decoder.Decode(&params); err != nil {
+			fmt.Printf("Error decoding parameters: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+
+		wrt.Header().Set("Content-Type", "application/json")
+		if !validateChirp(params.Body) {
+			dat, err := json.Marshal(chirpError{
+				Error: "Chirp is too long",
+			})
+			if err != nil {
+				fmt.Printf("Error marshalling JSON: %v\n", err)
+				wrt.WriteHeader(500)
+			} else {
+				wrt.WriteHeader(400)
+				wrt.Write(dat)
+			}
+			return
+		}
+
+		if _, err := apiCfg.db.GetUser(req.Context(), params.UserId); err != nil {
+			fmt.Printf("Error retrieving user for id %v: %v", params.UserId, err)
+			wrt.WriteHeader(400)
+			wrt.Write([]byte(fmt.Sprintf("No user with id %v exists in the DB!", params.UserId)))
+			return
+		}
+
+		chirp, err := apiCfg.db.CreateChirp(req.Context(), database.CreateChirpParams{
+			Body: removeProfanities(params.Body),
+			UserID: uuid.NullUUID{
+				UUID:  params.UserId,
+				Valid: true,
+			},
+		})
+		if err != nil {
+			fmt.Printf("Error creating chirp: %v\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+
+		message := Chirp{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      chirp.Body,
+			UserId:    chirp.UserID.UUID,
+		}
+		dat, err := json.Marshal(message)
+		if err != nil {
+			fmt.Printf("Error marshalling JSON: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+
 		wrt.WriteHeader(201)
 		wrt.Write(dat)
 	})
