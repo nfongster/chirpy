@@ -193,6 +193,36 @@ func main() {
 		wrt.Write(dat)
 	})
 
+	mux.HandleFunc("GET /api/chirps", func(wrt http.ResponseWriter, req *http.Request) {
+		wrt.Header().Set("Content-Type", "application/json")
+		chirps, err := apiCfg.db.GetAllChirps(req.Context())
+		if err != nil {
+			fmt.Printf("Error getting all chirps from DB: %v\n", err)
+			return
+		}
+
+		messages := make([]Chirp, len(chirps))
+		for i, chirp := range chirps {
+			messages[i] = Chirp{
+				ID:        chirp.ID,
+				CreatedAt: chirp.CreatedAt,
+				UpdatedAt: chirp.UpdatedAt,
+				Body:      chirp.Body,
+				UserId:    chirp.UserID.UUID,
+			}
+		}
+
+		dat, err := json.Marshal(messages)
+		if err != nil {
+			fmt.Printf("Error marshalling JSON: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+
+		wrt.WriteHeader(200)
+		wrt.Write(dat)
+	})
+
 	server := &http.Server{
 		Addr:    ":8080",
 		Handler: mux,
