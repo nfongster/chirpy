@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/nfongster/chirpy/internal/auth"
 	"github.com/nfongster/chirpy/internal/database"
 )
 
@@ -106,7 +107,21 @@ func main() {
 		}
 
 		// Write response
-		user, err := apiCfg.db.CreateUser(req.Context(), params.Email)
+		if params.Password == "" {
+			wrt.WriteHeader(400)
+			wrt.Write([]byte("No password was supplied!"))
+			return
+		}
+		hashedPassword, err := auth.HashPassword(params.Password)
+		if err != nil {
+			fmt.Printf("Error hashing password: %v", err)
+			wrt.WriteHeader(500)
+			return
+		}
+		user, err := apiCfg.db.CreateUser(req.Context(), database.CreateUserParams{
+			Email:          params.Email,
+			HashedPassword: hashedPassword,
+		})
 		if err != nil {
 			fmt.Printf("Error querying user for email %s: %s\n", params.Email, err)
 			wrt.WriteHeader(500)
