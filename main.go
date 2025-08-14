@@ -99,7 +99,7 @@ func main() {
 	mux.HandleFunc("POST /api/users", func(wrt http.ResponseWriter, req *http.Request) {
 		// Handle request
 		decoder := json.NewDecoder(req.Body)
-		params := createUserParameters{}
+		params := userParameters{}
 		if err := decoder.Decode(&params); err != nil {
 			fmt.Printf("Error decoding parameters: %s\n", err)
 			wrt.WriteHeader(500)
@@ -146,9 +146,46 @@ func main() {
 		wrt.Write(dat)
 	})
 
+	mux.HandleFunc("POST /api/login", func(wrt http.ResponseWriter, req *http.Request) {
+		decoder := json.NewDecoder(req.Body)
+		params := userParameters{}
+		if err := decoder.Decode(&params); err != nil {
+			fmt.Printf("Error decoding parameters: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+
+		user, err := apiCfg.db.GetUserByEmail(req.Context(), params.Email)
+		if err != nil {
+			wrt.WriteHeader(401)
+			fmt.Fprint(wrt, "No user with the email %s was found", params.Email)
+			return
+		}
+		// Check to see if requested password matches stored hash
+		if err := auth.CheckPasswordHash(params.Password, user.HashedPassword); err != nil {
+			wrt.WriteHeader(401)
+			wrt.Write([]byte("incorrect email or password"))
+			return
+		}
+
+		dat, err := json.Marshal(User{
+			ID:        user.ID,
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+			Email:     user.Email,
+		})
+		if err != nil {
+			fmt.Printf("Error marshalling JSON: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+		wrt.WriteHeader(200)
+		wrt.Write(dat)
+	})
+
 	mux.HandleFunc("POST /api/chirps", func(wrt http.ResponseWriter, req *http.Request) {
 		decoder := json.NewDecoder(req.Body)
-		params := createChirpParameters{}
+		params := chirpParameters{}
 		if err := decoder.Decode(&params); err != nil {
 			fmt.Printf("Error decoding parameters: %s\n", err)
 			wrt.WriteHeader(500)

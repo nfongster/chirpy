@@ -36,16 +36,12 @@ type Chirp struct {
 
 // JSON PACKETS SENT BY CLIENT
 
-type validateChirpParameters struct {
-	Body string `json:"body"`
-}
-
-type createUserParameters struct {
+type userParameters struct {
 	Password string `json:"password"`
 	Email    string `json:"email"`
 }
 
-type createChirpParameters struct {
+type chirpParameters struct {
 	Body   string    `json:"body"`
 	UserId uuid.UUID `json:"user_id"`
 }
