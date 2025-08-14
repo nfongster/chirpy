@@ -198,6 +198,7 @@ func main() {
 		chirps, err := apiCfg.db.GetAllChirps(req.Context())
 		if err != nil {
 			fmt.Printf("Error getting all chirps from DB: %v\n", err)
+			wrt.WriteHeader(500)
 			return
 		}
 
@@ -213,6 +214,47 @@ func main() {
 		}
 
 		dat, err := json.Marshal(messages)
+		if err != nil {
+			fmt.Printf("Error marshalling JSON: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+
+		wrt.WriteHeader(200)
+		wrt.Write(dat)
+	})
+
+	mux.HandleFunc("GET /api/chirps/{chirpID}", func(wrt http.ResponseWriter, req *http.Request) {
+		wrt.Header().Set("Content-Type", "application/json")
+		chirpID := req.PathValue("chirpID")
+		if chirpID == "" {
+			fmt.Println("failed to parse requested chirp ID")
+			wrt.WriteHeader(500)
+			return
+		}
+
+		id, err := uuid.Parse(chirpID)
+		if err != nil {
+			wrt.WriteHeader(500)
+			fmt.Fprintf(wrt, "Could not parse %v into a uuid", chirpID)
+			return
+		}
+		chirp, err := apiCfg.db.GetChirp(req.Context(), id)
+		if err != nil {
+			wrt.WriteHeader(404)
+			fmt.Fprintf(wrt, "No chirp found for id %v", chirpID)
+			return
+		}
+
+		message := Chirp{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      chirp.Body,
+			UserId:    chirp.UserID.UUID,
+		}
+
+		dat, err := json.Marshal(message)
 		if err != nil {
 			fmt.Printf("Error marshalling JSON: %s\n", err)
 			wrt.WriteHeader(500)
