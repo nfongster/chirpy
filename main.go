@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -51,6 +52,7 @@ func main() {
 	}
 	dbURL := os.Getenv("DB_URL")
 	platform := os.Getenv("PLATFORM")
+	secret := os.Getenv("SECRET")
 
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -61,7 +63,8 @@ func main() {
 
 	mux := http.NewServeMux()
 	apiCfg := &apiConfig{
-		db: dbQueries,
+		db:     dbQueries,
+		secret: secret,
 	}
 
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
@@ -158,7 +161,6 @@ func main() {
 		user, err := apiCfg.db.GetUserByEmail(req.Context(), params.Email)
 		if err != nil {
 			wrt.WriteHeader(401)
-			fmt.Fprint(wrt, "No user with the email %s was found", params.Email)
 			return
 		}
 		// Check to see if requested password matches stored hash
@@ -168,11 +170,24 @@ func main() {
 			return
 		}
 
+		// Create JWT
+		expiresIn := time.Hour
+		if params.ExpiresInSeconds != 0 && params.ExpiresInSeconds < 3600 {
+			expiresIn = time.Duration(params.ExpiresInSeconds) * time.Second
+		}
+		ss, err := auth.MakeJWT(user.ID, apiCfg.secret, expiresIn)
+		if err != nil {
+			fmt.Printf("Error creating JWT: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+
 		dat, err := json.Marshal(User{
 			ID:        user.ID,
 			CreatedAt: user.CreatedAt,
 			UpdatedAt: user.UpdatedAt,
 			Email:     user.Email,
+			Token:     ss,
 		})
 		if err != nil {
 			fmt.Printf("Error marshalling JSON: %s\n", err)
@@ -184,6 +199,18 @@ func main() {
 	})
 
 	mux.HandleFunc("POST /api/chirps", func(wrt http.ResponseWriter, req *http.Request) {
+		// Check JWT first
+		tokenString, err := auth.GetBearerToken(req.Header)
+		if err != nil {
+			wrt.WriteHeader(401)
+			return
+		}
+		userId, err := auth.ValidateJWT(tokenString, apiCfg.secret)
+		if err != nil {
+			wrt.WriteHeader(401)
+			return
+		}
+
 		decoder := json.NewDecoder(req.Body)
 		params := chirpParameters{}
 		if err := decoder.Decode(&params); err != nil {
@@ -207,17 +234,10 @@ func main() {
 			return
 		}
 
-		if _, err := apiCfg.db.GetUser(req.Context(), params.UserId); err != nil {
-			fmt.Printf("Error retrieving user for id %v: %v", params.UserId, err)
-			wrt.WriteHeader(400)
-			wrt.Write([]byte(fmt.Sprintf("No user with id %v exists in the DB!", params.UserId)))
-			return
-		}
-
 		chirp, err := apiCfg.db.CreateChirp(req.Context(), database.CreateChirpParams{
 			Body: removeProfanities(params.Body),
 			UserID: uuid.NullUUID{
-				UUID:  params.UserId,
+				UUID:  userId,
 				Valid: true,
 			},
 		})
