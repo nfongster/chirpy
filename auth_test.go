@@ -2,7 +2,9 @@ package main
 
 import (
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/nfongster/chirpy/internal/auth"
 )
 
@@ -29,5 +31,24 @@ func TestCheckPasswordHashWrongPassword(t *testing.T) {
 
 	if err := auth.CheckPasswordHash("password2", hashedPassword); err == nil {
 		t.Errorf("Expected an error when checking a password hash against an incorrect source password.")
+	}
+}
+
+func TestMakeAndValidateJWT(t *testing.T) {
+	id := uuid.New()
+	secret := "my_secret"
+	ss, err := auth.MakeJWT(id, secret, 10*time.Second)
+
+	if err != nil {
+		t.Errorf("making JWT returned err: %v", err)
+	}
+
+	validatedId, err := auth.ValidateJWT(ss, secret)
+
+	if err != nil {
+		t.Errorf("validating JWT returned err: %v", err)
+	}
+	if validatedId != id {
+		t.Errorf("JWT was validated, but id did not match original id")
 	}
 }
