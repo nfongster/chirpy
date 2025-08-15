@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
@@ -50,5 +51,21 @@ func TestMakeAndValidateJWT(t *testing.T) {
 	}
 	if validatedId != id {
 		t.Errorf("JWT was validated, but id did not match original id")
+	}
+}
+
+func TestGetBearerToken(t *testing.T) {
+	tokenString := "iamastring"
+
+	headers := make(http.Header)
+	headers.Set("Content-Type", "application-json")
+	headers.Set("Authorization", "Bearer "+tokenString)
+
+	bearer, err := auth.GetBearerToken(headers)
+	if err != nil {
+		t.Errorf("error getting bearer token from HTTP header: %v", err)
+	}
+	if bearer != tokenString {
+		t.Errorf("bearer (%s) != tokenString (%s)", bearer, tokenString)
 	}
 }
