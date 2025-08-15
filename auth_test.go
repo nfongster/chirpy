@@ -69,3 +69,13 @@ func TestGetBearerToken(t *testing.T) {
 		t.Errorf("bearer (%s) != tokenString (%s)", bearer, tokenString)
 	}
 }
+
+func TestMakeRefreshToken(t *testing.T) {
+	token, err := auth.MakeRefreshToken()
+	if err != nil {
+		t.Errorf("error making refresh token: %v", err)
+	}
+	if token == "" {
+		t.Errorf("token was empty string!")
+	}
+}
