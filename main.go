@@ -150,6 +150,69 @@ func main() {
 		wrt.Write(dat)
 	})
 
+	mux.HandleFunc("PUT /api/users", func(wrt http.ResponseWriter, req *http.Request) {
+		// Check JWT first
+		tokenString, err := auth.GetBearerToken(req.Header)
+		if err != nil {
+			wrt.WriteHeader(401)
+			return
+		}
+		userId, err := auth.ValidateJWT(tokenString, apiCfg.secret)
+		if err != nil {
+			wrt.WriteHeader(401)
+			return
+		}
+
+		// Get new email and password
+		decoder := json.NewDecoder(req.Body)
+		params := userParameters{}
+		if err := decoder.Decode(&params); err != nil {
+			fmt.Printf("Error decoding parameters: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+		if params.Password == "" {
+			wrt.WriteHeader(400)
+			wrt.Write([]byte("No password was supplied!"))
+			return
+		}
+
+		// Hash the new password
+		hashedPassword, err := auth.HashPassword(params.Password)
+		if err != nil {
+			fmt.Printf("Error hashing password: %v", err)
+			wrt.WriteHeader(500)
+			return
+		}
+		// Update user info in DB
+		user, err := apiCfg.db.UpdateUser(req.Context(), database.UpdateUserParams{
+			ID:             userId,
+			Email:          params.Email,
+			HashedPassword: hashedPassword,
+		})
+		// Send response
+		if err != nil {
+			wrt.WriteHeader(500)
+			return
+		}
+
+		dat, err := json.Marshal(User{
+			ID:        user.ID,
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+			Email:     user.Email,
+		})
+		if err != nil {
+			fmt.Printf("Error marshalling JSON: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+
+		wrt.Header().Set("Content-Type", "application/json")
+		wrt.WriteHeader(200)
+		wrt.Write(dat)
+	})
+
 	mux.HandleFunc("POST /api/login", func(wrt http.ResponseWriter, req *http.Request) {
 		decoder := json.NewDecoder(req.Body)
 		params := userParameters{}
