@@ -171,23 +171,37 @@ func main() {
 		}
 
 		// Create JWT
-		expiresIn := time.Hour
-		if params.ExpiresInSeconds != 0 && params.ExpiresInSeconds < 3600 {
-			expiresIn = time.Duration(params.ExpiresInSeconds) * time.Second
-		}
-		ss, err := auth.MakeJWT(user.ID, apiCfg.secret, expiresIn)
+		ss, err := auth.MakeJWT(user.ID, apiCfg.secret, time.Hour)
 		if err != nil {
 			fmt.Printf("Error creating JWT: %s\n", err)
 			wrt.WriteHeader(500)
 			return
 		}
 
+		// Create refresh token
+		rt, err := auth.MakeRefreshToken()
+		if err != nil {
+			fmt.Printf("Error creating refresh token: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+
+		// Save refresh token to DB
+		apiCfg.db.CreateRefreshToken(req.Context(), database.CreateRefreshTokenParams{
+			Token: rt,
+			UserID: uuid.NullUUID{
+				UUID:  user.ID,
+				Valid: true},
+			ExpiresAt: time.Now().Add(24 * 60 * time.Hour),
+		})
+
 		dat, err := json.Marshal(User{
-			ID:        user.ID,
-			CreatedAt: user.CreatedAt,
-			UpdatedAt: user.UpdatedAt,
-			Email:     user.Email,
-			Token:     ss,
+			ID:           user.ID,
+			CreatedAt:    user.CreatedAt,
+			UpdatedAt:    user.UpdatedAt,
+			Email:        user.Email,
+			Token:        ss,
+			RefreshToken: rt,
 		})
 		if err != nil {
 			fmt.Printf("Error marshalling JSON: %s\n", err)
