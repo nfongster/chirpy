@@ -415,6 +415,51 @@ func main() {
 		wrt.Write(dat)
 	})
 
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", func(wrt http.ResponseWriter, req *http.Request) {
+		// Check JWT first
+		tokenString, err := auth.GetBearerToken(req.Header)
+		if err != nil {
+			wrt.WriteHeader(401)
+			return
+		}
+		userId, err := auth.ValidateJWT(tokenString, apiCfg.secret)
+		if err != nil {
+			wrt.WriteHeader(401)
+			return
+		}
+		// Return 403 if user ID not equal to chirp ID's user id
+		chirpID := req.PathValue("chirpID")
+		if chirpID == "" {
+			fmt.Println("failed to parse requested chirp ID")
+			wrt.WriteHeader(500)
+			return
+		}
+
+		id, err := uuid.Parse(chirpID)
+		if err != nil {
+			wrt.WriteHeader(500)
+			fmt.Fprintf(wrt, "Could not parse %v into a uuid", chirpID)
+			return
+		}
+		chirp, err := apiCfg.db.GetChirp(req.Context(), id)
+		if err != nil {
+			wrt.WriteHeader(404)
+			fmt.Fprintf(wrt, "No chirp found for id %v", chirpID)
+			return
+		}
+		if chirp.UserID.UUID != userId {
+			wrt.WriteHeader(403)
+			return
+		}
+		// Delete chirp
+		if err := apiCfg.db.DeleteChirp(req.Context(), chirp.ID); err != nil {
+			fmt.Println("Failed to delete chirp")
+			wrt.WriteHeader(500)
+			return
+		}
+		wrt.WriteHeader(204)
+	})
+
 	mux.HandleFunc("POST /api/refresh", func(wrt http.ResponseWriter, req *http.Request) {
 		// Check refresh token first
 		tokenString, err := auth.GetBearerToken(req.Header)
