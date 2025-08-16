@@ -17,6 +17,7 @@ import (
 	"github.com/nfongster/chirpy/internal/database"
 )
 
+// TODO: add other middleware (checking JWT, etc.)
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	f := func(wrt http.ResponseWriter, req *http.Request) {
 		cfg.fileserverHits.Add(1)
@@ -349,6 +350,63 @@ func main() {
 
 		wrt.WriteHeader(200)
 		wrt.Write(dat)
+	})
+
+	mux.HandleFunc("POST /api/refresh", func(wrt http.ResponseWriter, req *http.Request) {
+		// Check refresh token first
+		tokenString, err := auth.GetBearerToken(req.Header)
+		if err != nil {
+			fmt.Printf("error checking refresh token: %v\n", err)
+			wrt.WriteHeader(401)
+			return
+		}
+
+		// Get refresh token from DB
+		token, err := apiCfg.db.GetRefreshToken(req.Context(), tokenString)
+		if err != nil || token.ExpiresAt.Before(time.Now()) {
+			fmt.Printf("err because token did not exist or was expired: %v\n", err)
+			wrt.WriteHeader(401)
+			return
+		}
+
+		// Create new JWT for the given user
+		jwt, err := auth.MakeJWT(token.UserID.UUID, apiCfg.secret, time.Hour)
+		if err != nil {
+			fmt.Printf("Error making JWT: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+		wrt.WriteHeader(200)
+		message := struct {
+			Token string `json:"token"`
+		}{
+			Token: jwt,
+		}
+		dat, err := json.Marshal(message)
+		if err != nil {
+			fmt.Printf("Error marshalling JSON: %s\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+		wrt.Write(dat)
+	})
+
+	mux.HandleFunc("POST /api/revoke", func(wrt http.ResponseWriter, req *http.Request) {
+		// Check refresh token first
+		refreshToken, err := auth.GetBearerToken(req.Header)
+		if err != nil {
+			fmt.Printf("error getting refresh token: %v\n", err)
+			wrt.WriteHeader(401)
+			return
+		}
+
+		// Revoke token in DB
+		if err := apiCfg.db.RevokeRefreshToken(req.Context(), refreshToken); err != nil {
+			fmt.Printf("error revoking refresh token: %v\n", err)
+			wrt.WriteHeader(500)
+			return
+		}
+		wrt.WriteHeader(204)
 	})
 
 	server := &http.Server{
