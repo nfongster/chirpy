@@ -1,0 +1,41 @@
+POST http://localhost:8080/admin/reset
+
+###
+
+POST http://localhost:8080/api/users
+Content-Type: application/json
+
+{
+  "email": "saul@bettercall.com",
+  "password": "123456"
+}
+
+###
+
+POST http://localhost:8080/api/login
+Content-Type: application/json
+
+{
+  "email": "saul@bettercall.com",
+  "password": "123456"
+}
+
+###
+
+POST http://localhost:8080/api/chirps
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJjaGlycHkiLCJzdWIiOiJmOWI4ZTZmZS03YjA2LTRkMWItYTU3Ny1mNDY5MTRmMTZmZDUiLCJleHAiOjE3NTUzNjQ3OTIsImlhdCI6MTc1NTM2MTE5Mn0.XkV6tC38IJ19H6TEsZealwWXAzf4i0PBPe-CzXcx0jU
+
+{
+  "body": "Let’s just say I know a guy... who knows a guy... who knows another guy."
+}
+
+###
+
+POST http://localhost:8080/api/refresh
+Authorization: Bearer 2c3ea7776acb54fab9777aa819430973a0e6972fe410481dffd7d74b4e60c22a
+
+###
+
+POST http://localhost:8080/api/revoke
+Authorization: Bearer 2c3ea7776acb54fab9777aa819430973a0e6972fe410481dffd7d74b4e60c22a
